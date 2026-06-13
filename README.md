@@ -13,7 +13,7 @@ Every project here pairs **working code** with a **`DESIGN.md`** (architecture +
 
 | # | Project | Focus | Status |
 |---|---------|-------|--------|
-| 01 | [OAuth2 / OIDC — Authorization Code + PKCE](projects/01-oauth2-oidc-pkce/) | OIDC relying-party login done securely (PKCE, state, nonce, ID-token validation) | 🟡 In progress |
+| 01 | [OAuth2 / OIDC — Authorization Code + PKCE](projects/01-oauth2-oidc-pkce/) | OIDC relying-party login done securely (PKCE, state, nonce, ID-token validation) | 🟢 Working — verified end-to-end vs Entra ID |
 
 _Status key: 🟢 complete · 🟡 in progress · ⚪ planned_
 

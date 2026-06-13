@@ -15,6 +15,7 @@ hand-rolling crypto, and turns on every relevant protection:
 
 See README.md to run it. Security rationale and threat model are in DESIGN.md.
 """
+import logging
 import os
 
 from authlib.integrations.starlette_client import OAuth, OAuthError
@@ -42,6 +43,14 @@ SESSION_SECRET = _require("SESSION_SECRET")       # random 32+ byte string
 REDIRECT_URI   = os.environ.get("OIDC_REDIRECT_URI", "http://localhost:8000/auth/callback")
 SCOPES         = os.environ.get("OIDC_SCOPES", "openid profile email")
 COOKIE_SECURE  = os.environ.get("COOKIE_SECURE", "false").lower() == "true"  # True behind HTTPS
+
+# DEV-ONLY learning aid. When true, the raw ID token (a JWT) is written to the
+# server log on each login so you can decode it yourself (see decode_jwt.py).
+# Default OFF. NEVER enable outside local dev: raw tokens in logs are sensitive
+# credentials and a real finding if shipped.
+DEV_LOG_ID_TOKEN = os.environ.get("DEV_LOG_ID_TOKEN", "false").lower() == "true"
+
+logger = logging.getLogger("oidc-rp")
 
 app = FastAPI(title="OIDC RP — Authorization Code + PKCE")
 
@@ -75,7 +84,8 @@ async def home(request: Request):
         who = user.get("email") or user.get("name") or user.get("sub")
         return HTMLResponse(
             f"<h3>Signed in as {who}</h3>"
-            '<p><a href="/me">/me (claims)</a> &middot; <a href="/logout">logout</a></p>'
+            '<p><a href="/whoami">/whoami (decoded ID-token claims)</a> &middot; '
+            '<a href="/me">/me (json)</a> &middot; <a href="/logout">logout</a></p>'
         )
     return HTMLResponse('<h3>Not signed in</h3><p><a href="/login">Log in with OIDC</a></p>')
 
@@ -97,6 +107,15 @@ async def callback(request: Request):
         # Fail closed: never establish a session on any validation error.
         raise HTTPException(status_code=401, detail=f"Authentication failed: {exc.error}")
 
+    # DEV-ONLY: log the raw ID token so you can decode it the "real" way:
+    #   python decode_jwt.py "<paste the token from the log>"
+    # Gated off by default; the token never goes to the browser or the cookie.
+    if DEV_LOG_ID_TOKEN:
+        logger.warning(
+            "[DEV] raw id_token (decode locally with decode_jwt.py; never enable in prod):\n%s",
+            token.get("id_token", "(no id_token in response)"),
+        )
+
     claims = token.get("userinfo") or {}
     # Store only what the app needs. Do NOT put raw tokens in the cookie.
     request.session["user"] = {
@@ -104,6 +123,10 @@ async def callback(request: Request):
         "email": claims.get("email"),
         "name": claims.get("name"),
     }
+    # LEARNING ONLY: also stash the full *validated* ID-token claims so the
+    # /whoami debug view can show what the token actually contained. These are
+    # identity claims (not the raw token); a real app would not need to keep them.
+    request.session["claims"] = dict(claims)
     return RedirectResponse(url="/")
 
 
@@ -113,6 +136,55 @@ async def me(request: Request):
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return JSONResponse(user)
+
+
+# Maps the security-critical ID-token claims to a plain-English explanation.
+_CLAIM_NOTES = {
+    "iss":   "Issuer — who minted this token (must be your tenant). Validated.",
+    "aud":   "Audience — who it was minted FOR (must be your client_id). Validated.",
+    "exp":   "Expiry (unix time) — token is rejected after this. Validated.",
+    "iat":   "Issued-at (unix time).",
+    "nbf":   "Not-before (unix time).",
+    "nonce": "Replay protection — must match the value your app sent at /login. Validated.",
+    "sub":   "Subject — the stable unique user ID at the IdP.",
+    "tid":   "Tenant ID (Entra-specific).",
+    "email": "User email (from the 'email' scope).",
+    "name":  "Display name (from the 'profile' scope).",
+}
+
+
+@app.get("/whoami", response_class=HTMLResponse)
+async def whoami(request: Request):
+    """LEARNING view: shows the decoded, already-validated ID-token claims.
+
+    This is the *payload* of the ID token (a JWT). Authlib already verified the
+    signature (via JWKS) and the iss / aud / exp / nonce before we ever got here —
+    so what you see below is trusted, not raw input.
+    """
+    claims = request.session.get("claims")
+    if not claims:
+        raise HTTPException(status_code=401, detail="Not authenticated — log in first")
+
+    import html as _html
+    rows = []
+    for key in sorted(claims, key=lambda k: (k not in _CLAIM_NOTES, k)):
+        note = _CLAIM_NOTES.get(key, "")
+        rows.append(
+            f"<tr><td style='vertical-align:top;font-family:monospace;padding:4px 12px'>{_html.escape(key)}</td>"
+            f"<td style='vertical-align:top;font-family:monospace;padding:4px 12px'>{_html.escape(str(claims[key]))}</td>"
+            f"<td style='vertical-align:top;padding:4px 12px;color:#555'>{_html.escape(note)}</td></tr>"
+        )
+    return HTMLResponse(
+        "<h3>Your ID token — decoded &amp; validated claims</h3>"
+        "<p>This is the JWT <em>payload</em>. The signature, <code>iss</code>, <code>aud</code>, "
+        "<code>exp</code> and <code>nonce</code> were already verified before you saw this.</p>"
+        "<table style='border-collapse:collapse'>"
+        "<tr><th style='text-align:left;padding:4px 12px'>claim</th>"
+        "<th style='text-align:left;padding:4px 12px'>value</th>"
+        "<th style='text-align:left;padding:4px 12px'>what it means</th></tr>"
+        + "".join(rows) +
+        "</table><p><a href='/'>home</a> &middot; <a href='/logout'>logout</a></p>"
+    )
 
 
 @app.get("/logout")
