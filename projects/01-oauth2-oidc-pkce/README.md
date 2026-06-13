@@ -47,13 +47,36 @@ uvicorn app.main:app --reload --port 8000
 | `/` | shows sign-in state |
 | `/login` | starts the flow (builds the PKCE/state/nonce request) |
 | `/auth/callback` | validates the response, exchanges the code, establishes the session |
-| `/me` | returns the stored user claims (401 if not authenticated) |
+| `/me` | minimal stored user claims as JSON (401 if not authenticated) |
+| `/whoami` | **learning view** — the full decoded & validated ID-token claims, annotated |
 | `/logout` | clears the local session |
 
+## Learning tools (dev only)
+- **`/whoami`** renders the validated ID-token claims with a plain-English note per claim.
+- **`DEV_LOG_ID_TOKEN=true`** (in `.env`) logs the raw ID token to the server console on login so
+  you can decode it the real way. **Default off — leaving it on is itself a finding.**
+- **`decode_jwt.py "<jwt>"`** decodes (does *not* verify) a JWT — header, payload, and `exp`/`iat`/`nonce`
+  as readable UTC. Mirrors how an engineer inspects a token: anyone can *read* one; trust comes only
+  from *verification*.
+
 ## What I built / what I learned
-> _(my notes — filled in as I go)_
-- …
-- …
+Built a working, secure OIDC relying party and authenticated end-to-end against Entra ID
+(Authorization Code + PKCE). Key things that clicked by doing it:
+
+- **The browser never sees the tokens.** In the code flow the browser only ever holds a one-time
+  `code`; the token exchange and ID-token validation happen server-side. (Contrast: the deprecated
+  implicit flow returned tokens in the URL fragment.)
+- **The request-side protections are visible and load-bearing:** `code_challenge`+`S256` (PKCE),
+  `state` (CSRF), `nonce` (replay) all appear in the real `/authorize` redirect.
+- **Reading the ID token:** `aud` = my client_id (minted *for this app*), `iss` = my tenant,
+  `exp` ≈ 65-min window, and `nonce` **matched** the value sent at `/login` (replay protection in action).
+- **Identity:** key users on **`sub`** (stable, opaque), not `email`. Noticed `oid` (tenant-wide) vs
+  `sub` (per-app), and an `idp` claim pointing at a *different* tenant — i.e. I logged in as a
+  **federated/guest (B2B)** identity.
+- **Trust = verification, not readability.** `decode_jwt.py` reads any JWT without checking anything;
+  Authlib verified signature (via `kid` → JWKS), `iss`, `aud`, `exp`, `nonce` before trusting it.
+
+Full write-up (lessons, pitfalls, non-negotiables) for a future white paper: [`LESSONS.md`](LESSONS.md).
 
 ## Possible extensions
 - Refresh-token handling with rotation + revocation
