@@ -14,6 +14,7 @@ Every project here pairs **working code** with a **`DESIGN.md`** (architecture +
 | # | Project | Focus | Status |
 |---|---------|-------|--------|
 | 01 | [OAuth2 / OIDC — Authorization Code + PKCE](projects/01-oauth2-oidc-pkce/) | OIDC relying-party login done securely (PKCE, state, nonce, ID-token validation) | 🟢 Working — verified end-to-end vs Entra ID |
+| 02 | [JWT validation + JWKS rotation](projects/02-jwt-validation-jwks-rotation/) | Resource-server token validation: signature/JWKS, alg pinning, iss/aud/exp, graceful key rotation | 🟢 Working — verified incl. live key rotation |
 
 _Status key: 🟢 complete · 🟡 in progress · ⚪ planned_
 
