@@ -68,13 +68,45 @@ returned ID token validated and decoded to the expected claims.
 - *Out of scope here (and why):* running an IdP, authorization/permissions (authz), and API-to-API
   auth are separate concerns → separate projects, so each stays focused.
 
-## 7. How to demonstrate the understanding (for the paper / a reviewer)
+## 7. Language portability — what carries over, what's just plumbing
+OIDC/OAuth2 is a **protocol standard (RFCs), not a feature of any language**. So the understanding
+is ~90% portable; only the SDK and syntax change.
+
+**Identical in every language (the durable asset):** Authorization Code + PKCE; `state`/`nonce`/exact
+`redirect_uri`; ID-token validation (signature via `kid`→JWKS, `iss`, `aud`, `exp`, `nonce`); tokens
+stay server-side while the browser holds only a one-time code; identify users by `sub`; fail closed;
+`HttpOnly`/`SameSite`/`Secure` cookies; secrets out of code. Decode an ID token from a .NET, Go, or
+Node app and you read the *same* claims.
+
+**Changes per stack (disposable plumbing):** just the library + framework.
+
+| Stack | OIDC library (the "Authlib" slot) | Web framework |
+|-------|-----------------------------------|---------------|
+| Python | Authlib / oauthlib | FastAPI / Flask / Django |
+| Node / TypeScript | `openid-client`, Passport | Express / Nest |
+| .NET | Microsoft.Identity.Web (MSAL) | ASP.NET Core |
+| Java | Spring Security OAuth, Nimbus | Spring Boot |
+| Go | `coreos/go-oidc` + `x/oauth2` | net/http / Gin |
+
+**Carry-over caution (a non-negotiable in any language):** don't assume the library validates
+everything by default — some skip `nonce` or `aud` unless enabled. The validation *checklist* is
+universal; blind trust in the SDK is not.
+
+**Not language, but watch it:** some details are **IdP-specific** (e.g. Entra's `oid`/`tid`, the v2.0
+endpoint) rather than language-specific; and **client type** matters more than language — public
+clients (SPA/mobile, no secret) make PKCE mandatory, confidential (server) clients add a secret.
+
+**Architect framing:** own the **protocol and the threat model**; treat the SDK as an implementation
+detail. Learn the flow once and it transfers to every stack — porting is just "find this ecosystem's
+`openid-client` and map the concepts."
+
+## 8. How to demonstrate the understanding (for the paper / a reviewer)
 - Show the real `/authorize` redirect and name each parameter's job (PKCE/state/nonce).
 - Decode an ID token and walk `aud`/`iss`/`exp`/`nonce`; show the `nonce` matches the request.
 - State the trust boundary out loud: *"the browser only handles a one-time code; tokens and
   validation live server-side."* That sentence is the architect-level tell.
 
-## 8. Open questions / next to explore
+## 9. Open questions / next to explore
 - Refresh-token rotation + revocation (and detecting refresh-token replay).
 - RP-initiated logout and end-session semantics across IdPs.
 - `authz` (what a user can do) vs `authn` (who they are) — the next project.
