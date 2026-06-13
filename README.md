@@ -2,8 +2,7 @@
 
 Personal notes, resources, and **hands-on projects** for my career development in security.
 
-I'm a security engineer with 20 years in IT (networking/infrastructure) and 7 in application
-security. I'm deliberately closing the gap between AppSec engineering and **security architecture**,
+I'm deliberately closing the gap between AppSec engineering and **security architecture**,
 with a current focus on **authentication** — building real, runnable code and documenting the
 design and threat-model thinking behind each project.
 
